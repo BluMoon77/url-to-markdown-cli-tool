@@ -49,7 +49,8 @@ Three modules, one linear pipeline: `src/index.js` (CLI) → `src/lib/pageFetche
 ## Tests
 
 - `tests/include-tags.test.js` and `tests/table-conversion.test.js` call `getProcessedMarkdown()` directly against HTML fixtures in `tests/fixtures/{include-tags,tables}/` — no browser, no network. Add new conversion behavior here with a fixture.
-- `tests/cli.test.js` spawns the real CLI via `child_process.spawn` and **several tests hit the network** (`httpbin.org`, `example.com`) with 10s timeouts; they assert on argument-parsing/error output rather than fetched content, so they pass offline but run slowly.
+- `tests/cli.test.js` spawns the real CLI via `child_process.spawn` and drives it against a local fixture server (`tests/helpers/server.js`, ephemeral port on 127.0.0.1, routes `/html` and `/delay/:secs`). No network, no public endpoints.
+- `runCli()` prepends `--wait 0` unless the caller passes its own `--wait`. It must be *prepended*: `--include-tags` is variadic and would swallow a trailing flag as a tag name.
 - Assertions are mostly `toContain` on substrings rather than exact-output snapshots, deliberately tolerating whitespace differences.
 
 ## Related files

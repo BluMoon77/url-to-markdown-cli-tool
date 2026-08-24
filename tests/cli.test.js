@@ -1,11 +1,35 @@
 const path = require('path');
 const { spawn } = require('child_process');
+const { startServer } = require('./helpers/server');
+
+// These tests drive the real CLI, which launches a real browser. A local
+// fixture server keeps them deterministic and offline.
+let baseUrl;
+let closeServer;
+
+beforeAll(async () => {
+  const server = await startServer();
+  baseUrl = server.url;
+  closeServer = server.close;
+}, 30000);
+
+afterAll(async () => {
+  if (closeServer) {
+    await closeServer();
+  }
+});
 
 function runCli(args = []) {
   return new Promise((resolve) => {
     const nodePath = process.execPath;
     const cliPath = path.join(__dirname, '..', 'src', 'index.js');
-    const child = spawn(nodePath, [cliPath, ...args]);
+    // The fixture server responds instantly, so the default 1.5s settle time is
+    // pure overhead here - it costs ~30s across the suite. Tests that care about
+    // wait behavior pass their own --wait and keep it.
+    // Prepended, never appended: --include-tags is variadic, so a trailing
+    // --wait would be swallowed as a tag name.
+    const fullArgs = args.includes('--wait') ? args : ['--wait', '0', ...args];
+    const child = spawn(nodePath, [cliPath, ...fullArgs]);
 
     let stdout = '';
     let stderr = '';
@@ -34,7 +58,7 @@ describe('CLI Argument Validation', () => {
   });
 
   test('conflicting viewport options exits with error', async () => {
-    const result = await runCli(['http://example.com', '--mobile', '--desktop']);
+    const result = await runCli([`${baseUrl}/html`, '--mobile', '--desktop']);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/only one viewport preset/i);
   });
@@ -43,21 +67,20 @@ describe('CLI Argument Validation', () => {
 describe('Include Tags CLI Integration', () => {
   describe('Command-line argument parsing', () => {
     test('accepts single include-tags argument', async () => {
-      // Mock a simple HTTP server response to avoid network dependency
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'article']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'article']);
       // Should not fail due to argument parsing (may fail due to network/processing)
       expect(result.stderr).not.toMatch(/--include-tags requires at least one tag name/);
     }, 10000);
 
     test('accepts multiple include-tags arguments', async () => {
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'article', 'main', 'section']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'article', 'main', 'section']);
       // Should not fail due to argument parsing
       expect(result.stderr).not.toMatch(/--include-tags requires at least one tag name/);
     }, 10000);
 
     test('works with other flags combined', async () => {
       const result = await runCli([
-        'http://httpbin.org/html', 
+        `${baseUrl}/html`, 
         '--include-tags', 'article', 
         '--remove-tags', 'nav', 'footer',
         '--no-images'
@@ -69,7 +92,7 @@ describe('Include Tags CLI Integration', () => {
 
   describe('Error handling for invalid inputs', () => {
     test('empty include-tags flag shows error', async () => {
-      const result = await runCli(['http://example.com', '--include-tags']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags']);
       expect(result.code).not.toBe(0);
       // Commander.js shows its own error message for missing arguments
       expect(result.stderr).toMatch(/argument missing/);
@@ -78,7 +101,7 @@ describe('Include Tags CLI Integration', () => {
     test('include-tags with empty string is processed as tag name', async () => {
       // When an empty string is passed, Commander treats it as a valid tag name
       // This test verifies the behavior - it should process but likely find no content
-      const result = await runCli(['http://example.com', '--include-tags', '']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', '']);
       expect(result.code).not.toBe(0);
       // Should show warning about no content found for the empty tag name
       expect(result.stderr).toMatch(/No content found|No HTML content to convert/);
@@ -87,7 +110,7 @@ describe('Include Tags CLI Integration', () => {
     test('include-tags validation error shows appropriate message', async () => {
       // Test the CLI validation for empty include-tags array
       // This would happen if Commander somehow passes an empty array
-      const result = await runCli(['http://example.com', '--include-tags', '']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', '']);
       expect(result.code).not.toBe(0);
       // Should show error about invalid URL or no content found
       expect(result.stderr).toMatch(/Invalid URL provided|No content found|No HTML content to convert/);
@@ -95,7 +118,7 @@ describe('Include Tags CLI Integration', () => {
 
     test('invalid tag names are processed without CLI errors', async () => {
       // CLI should accept any string as tag names and let the processor handle validation
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'invalid@tag', '123tag', 'tag!']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'invalid@tag', '123tag', 'tag!']);
       
       // Should not fail due to CLI argument validation
       // May fail due to no matching content, but that's processor-level, not CLI-level
@@ -107,7 +130,7 @@ describe('Include Tags CLI Integration', () => {
 
     test('very long tag names are accepted by CLI', async () => {
       const longTagName = 'a'.repeat(1000);
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', longTagName]);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', longTagName]);
       
       // Should not fail due to CLI argument validation
       if (result.code !== 0) {
@@ -117,7 +140,7 @@ describe('Include Tags CLI Integration', () => {
     }, 10000);
 
     test('special characters in tag names are accepted by CLI', async () => {
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'tag@#$', 'tag!', 'tag%']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'tag@#$', 'tag!', 'tag%']);
       
       // Should not fail due to CLI argument validation
       if (result.code !== 0) {
@@ -132,13 +155,13 @@ describe('Include Tags CLI Integration', () => {
       test('CLI validates empty include-tags array correctly', async () => {
         // This test simulates what happens when Commander.js might pass an empty array
         // In practice, this is hard to trigger from command line, but we test the validation logic
-        const result = await runCli(['http://example.com', '--include-tags']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags']);
         expect(result.code).not.toBe(0);
         expect(result.stderr).toMatch(/argument missing|error: option.*requires argument/i);
       });
 
       test('CLI handles whitespace-only tag names', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', '   ', '\t']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', '   ', '\t']);
         
         // Should not fail at CLI level, but may fail at processing level
         if (result.code !== 0) {
@@ -149,7 +172,7 @@ describe('Include Tags CLI Integration', () => {
 
     describe('No matching content error handling', () => {
       test('CLI handles no matching content gracefully', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', 'nonexistenttag']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', 'nonexistenttag']);
         
         // Should exit with error code when no content found
         expect(result.code).not.toBe(0);
@@ -157,7 +180,7 @@ describe('Include Tags CLI Integration', () => {
       }, 15000);
 
       test('CLI shows appropriate error for multiple non-matching tags', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', 'tag1', 'tag2', 'tag3']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', 'tag1', 'tag2', 'tag3']);
         
         if (result.code !== 0) {
           expect(result.stderr).toMatch(/No content found|No HTML content to convert/);
@@ -167,7 +190,7 @@ describe('Include Tags CLI Integration', () => {
 
     describe('Graceful degradation in CLI', () => {
       test('CLI handles network errors gracefully', async () => {
-        const result = await runCli(['http://nonexistent-domain-12345.com', '--include-tags', 'article']);
+        const result = await runCli(['http://127.0.0.1:1/', '--include-tags', 'article']);
         
         expect(result.code).not.toBe(0);
         expect(result.stderr).toMatch(/Error:|Failed to fetch|net::|getaddrinfo ENOTFOUND/);
@@ -182,7 +205,7 @@ describe('Include Tags CLI Integration', () => {
 
       test('CLI handles timeout scenarios with include-tags', async () => {
         // Use a very short wait time with a slow-loading page
-        const result = await runCli(['http://httpbin.org/delay/5', '--include-tags', 'body', '--wait', '0.1']);
+        const result = await runCli([`${baseUrl}/delay/5`, '--include-tags', 'body', '--wait', '0.1']);
         
         // Should either succeed or fail gracefully with timeout
         if (result.code !== 0) {
@@ -193,7 +216,7 @@ describe('Include Tags CLI Integration', () => {
 
     describe('Invalid tag name handling in CLI', () => {
       test('CLI accepts but processes invalid HTML tag names', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', '<invalid>', 'tag@#$']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', '<invalid>', 'tag@#$']);
         
         // Should not fail at CLI validation level
         if (result.code !== 0) {
@@ -204,7 +227,7 @@ describe('Include Tags CLI Integration', () => {
       }, 10000);
 
       test('CLI handles numeric tag names', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', '123', '456']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', '123', '456']);
         
         if (result.code !== 0) {
           expect(result.stderr).toMatch(/No content found|No HTML content to convert/);
@@ -213,7 +236,7 @@ describe('Include Tags CLI Integration', () => {
       }, 10000);
 
       test('CLI handles CSS selector-like strings as tag names', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', '.class', '#id', 'div.class']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', '.class', '#id', 'div.class']);
         
         if (result.code !== 0) {
           expect(result.stderr).toMatch(/No content found|No HTML content to convert/);
@@ -224,7 +247,7 @@ describe('Include Tags CLI Integration', () => {
 
     describe('Error recovery and resilience in CLI', () => {
       test('CLI continues processing with mixed valid and invalid tags', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', 'body', 'invalid@tag', 'nonexistent']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', 'body', 'invalid@tag', 'nonexistent']);
         
         // Should succeed because 'body' is a valid tag that exists
         expect(result.code).toBe(0);
@@ -233,7 +256,7 @@ describe('Include Tags CLI Integration', () => {
 
       test('CLI handles large number of tag arguments', async () => {
         const manyTags = Array.from({length: 50}, (_, i) => `tag${i}`);
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', ...manyTags]);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', ...manyTags]);
         
         // Should not fail due to too many arguments
         if (result.code !== 0) {
@@ -244,7 +267,7 @@ describe('Include Tags CLI Integration', () => {
 
       test('CLI handles combination of include-tags with other error conditions', async () => {
         const result = await runCli([
-          'http://httpbin.org/html',
+          `${baseUrl}/html`,
           '--include-tags', 'nonexistent',
           '--remove-tags', 'script',
           '--wait', '0.1',
@@ -258,7 +281,7 @@ describe('Include Tags CLI Integration', () => {
       }, 15000);
 
       test('CLI error messages are user-friendly', async () => {
-        const result = await runCli(['http://httpbin.org/html', '--include-tags', 'nonexistent']);
+        const result = await runCli([`${baseUrl}/html`, '--include-tags', 'nonexistent']);
         
         if (result.code !== 0) {
           // Error message should be clear and not show internal stack traces
@@ -291,8 +314,8 @@ describe('Include Tags CLI Integration', () => {
 
   describe('End-to-end CLI functionality', () => {
     test('include-tags processes content successfully with valid URL', async () => {
-      // Use httpbin.org/html which provides a simple HTML page for testing
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'body']);
+      // Fixture server page; see tests/helpers/server.js
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'body']);
       
       // Should complete successfully (exit code 0) and produce markdown output
       expect(result.code).toBe(0);
@@ -302,7 +325,7 @@ describe('Include Tags CLI Integration', () => {
 
     test('include-tags with no matching content handles gracefully', async () => {
       // Use a URL that won't have the specified tags
-      const result = await runCli(['http://httpbin.org/html', '--include-tags', 'nonexistenttag']);
+      const result = await runCli([`${baseUrl}/html`, '--include-tags', 'nonexistenttag']);
       
       // Based on the current implementation, this may exit with error code 1
       // when no content is found, which is acceptable behavior
@@ -317,7 +340,7 @@ describe('Include Tags CLI Integration', () => {
 
     test('include-tags combined with remove-tags works correctly', async () => {
       const result = await runCli([
-        'http://httpbin.org/html', 
+        `${baseUrl}/html`, 
         '--include-tags', 'body',
         '--remove-tags', 'script', 'style'
       ]);
@@ -334,7 +357,7 @@ describe('Include Tags CLI Integration', () => {
       
       try {
         const result = await runCli([
-          'http://httpbin.org/html',
+          `${baseUrl}/html`,
           '--include-tags', 'body',
           '--output', tempFile
         ]);
