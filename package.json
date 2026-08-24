@@ -24,18 +24,18 @@
     "web-to-markdown"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/mmdclx/url-to-markdown-cli-tool#readme",
+  "homepage": "https://github.com/BluMoon77/url-to-markdown-cli-tool#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmdclx/url-to-markdown-cli-tool.git"
+    "url": "git+https://github.com/BluMoon77/url-to-markdown-cli-tool.git"
   },
   "bugs": {
-    "url": "https://github.com/mmdclx/url-to-markdown-cli-tool/issues"
+    "url": "https://github.com/BluMoon77/url-to-markdown-cli-tool/issues"
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
     "commander": "^12.0.0",
-    "puppeteer": "^23.0.0",
+    "puppeteer": "^25.8.0",
     "turndown": "^7.2.0"
   },
   "devDependencies": {
@@ -47,6 +47,10 @@
   "files": [
     "src/index.js",
     "src/lib/",
-    "README.md"
-  ]
+    "README.md",
+    "LICENSE"
+  ],
+  "allowScripts": {
+    "puppeteer@25.8.0": true
+  }
 }

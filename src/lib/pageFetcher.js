@@ -58,7 +58,7 @@ async function getPageSource(url, options = {}) {
         }
         
         browser = await puppeteer.launch({
-            headless: isHeadless ? 'new' : false,
+            headless: isHeadless,
             args
         });
 
