@@ -46,6 +46,15 @@ Three modules, one linear pipeline: `src/index.js` (CLI) → `src/lib/pageFetche
 - **The version string is duplicated**: `package.json` and the hardcoded `.version('1.1.0')` in `src/index.js`. Bump both.
 - `package.json` `files` whitelists what ships to npm (`src/index.js`, `src/lib/`, `README.md`); new source directories must be added there.
 
+## GUI (`gui/`)
+
+A GTK4/libadwaita front-end in Python. It is a **wrapper, not a second implementation** — `build_argv()` translates the form into CLI flags and `Gio.Subprocess` runs the real `src/index.js`. Keep it that way: conversion logic belongs in the Node library, never duplicated in Python.
+
+- Form defaults deliberately mirror the CLI's (mobile viewport, 1.5s wait, images/links kept). If you change a CLI default, change the GUI's to match or they will silently disagree.
+- Progress comes from parsing `PROGRESS:<stage>` lines off stderr; `STAGE_LABELS` maps them to UI text. A new stage in `src/index.js` needs an entry there or it renders as the raw slug.
+- `find_node()` scans `$NVM_DIR` explicitly. An app launched from the GNOME grid never sourced the user's shell profile, so an nvm-managed node is not on `PATH`.
+- `gui/install.sh` **ignores `XDG_DATA_HOME` when it points inside a snap or flatpak sandbox**. Running it from a terminal inside snap-packaged VS Code otherwise writes the launcher to `~/snap/code/<rev>/.local/share/applications`, where the desktop shell never looks — it reports success and the app never appears.
+
 ## Tests
 
 - `tests/include-tags.test.js` and `tests/table-conversion.test.js` call `getProcessedMarkdown()` directly against HTML fixtures in `tests/fixtures/{include-tags,tables}/` — no browser, no network. Add new conversion behavior here with a fixture.

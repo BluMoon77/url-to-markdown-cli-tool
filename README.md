@@ -5,6 +5,7 @@ A Node.js CLI tool that converts web pages into clean, LLM-friendly markdown for
 No LLM or API keys required.
 
 **Key features:**
+- 🖥️ **Desktop app for GNOME** - a native GTK4/libadwaita front-end over the same CLI
 - 🔄 Convert any webpage to properly formatted markdown with headers, links, and structure
 - 🎯 **Targeted content extraction** - Include only specific HTML tags like articles, main content, or sections
 - 🧹 **Smart content cleaning** - Remove navigation, footers, scripts and other non-content elements
@@ -20,7 +21,10 @@ No LLM or API keys required.
 ## Quick Install
 
 ```bash
-npm install -g url-to-markdown-cli-tool
+git clone https://github.com/BluMoon77/url-to-markdown-cli-tool.git
+cd url-to-markdown-cli-tool
+npm install          # also downloads the Chromium build Puppeteer drives
+npm install -g .     # puts `url-to-md` on your PATH
 ```
 
 Then immediately get started:
@@ -28,34 +32,40 @@ Then immediately get started:
 url-to-md https://example.com -o example.md
 ```
 
-## Installation
-
-### Via npm (When published)
-
-```bash
-# Install globally to use anywhere
-npm install -g url-to-markdown-cli-tool
-
-# Or install locally in your project
-npm install url-to-markdown-cli-tool
-```
-
-### From Source (Current)
-
-```bash
-# Clone and install from this repository
-git clone https://github.com/yourusername/url-to-markdown-cli-tool.git
-cd url-to-markdown-cli-tool
-npm install
-npm install -g .
-```
-
 ### System Requirements
 
 - **Node.js** 18.0.0 or higher
-- **Google Chrome or Chromium** browser installed and accessible in PATH
+- Puppeteer downloads its own matching Chromium during `npm install`, so no
+  system browser is required.
 
-Chrome/Chromium will be automatically detected.
+If `npm install` is interrupted partway, that download can be left incomplete
+and every run then fails with `Could not find Chrome`. Repair it with:
+
+```bash
+npx puppeteer browsers install chrome
+```
+
+## Desktop App (GNOME)
+
+A GTK4/libadwaita front-end lives in [`gui/`](gui/). It is a thin wrapper: every
+conversion shells out to the same CLI, so the two can never disagree about what
+a given set of options does.
+
+```bash
+sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1   # usually already present
+./gui/install.sh                                          # adds it to the app grid
+```
+
+Then launch **URL to Markdown** from the app grid, or run it directly:
+
+```bash
+./gui/url_to_markdown_gui.py
+```
+
+The window exposes the URL field, include/remove tags, the content switches,
+viewport and wait time, and shows live progress while the page loads. Results
+can be copied to the clipboard or saved to a file. `./gui/install.sh --uninstall`
+removes the launcher.
 
 ## Usage
 
@@ -199,6 +209,7 @@ Options:
   --viewport-width <width>         Set viewport width in pixels (320-1920, default: 375)
   --viewport-height <height>       Set viewport height in pixels (568-1080, default: 667)
   --disable-web-security           Disable web security (CORS) - use with caution for difficult sites
+  --progress                       Emit PROGRESS:<stage> lines on stderr (for GUI front-ends)
   -h, --help                       display help for command
 ```
 
@@ -263,6 +274,7 @@ url-to-md https://example.com --wait 10.0
 
 ## Acknowledgments
 
+- Forked from [mmdclx/url-to-markdown-cli-tool](https://github.com/mmdclx/url-to-markdown-cli-tool)
 - Originally inspired by [m92vyas/llm-reader](https://github.com/m92vyas/llm-reader), a Python library
 - Built with [Puppeteer](https://pptr.dev/) for reliable browser automation
 - Uses [Cheerio](https://cheerio.js.org/) for server-side HTML manipulation
