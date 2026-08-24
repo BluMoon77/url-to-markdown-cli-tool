@@ -15,6 +15,13 @@ const { getProcessedMarkdown } = require('./lib/markdownProcessor');
  * @param {Object} options - CLI options object
  */
 async function run(options) {
+    // Machine-readable stage markers on stderr, off unless --progress is passed.
+    // Gated on a flag rather than TTY detection because the consumer is a GUI
+    // reading a pipe, which would fail a TTY check.
+    const emitProgress = options.progress
+        ? (stage) => process.stderr.write(`PROGRESS:${stage}\n`)
+        : () => {};
+
     try {
         // Fetch page source
         const pageSource = await getPageSource(options.url, {
@@ -23,7 +30,8 @@ async function run(options) {
             showBrowser: options.showBrowser,
             disableWebSecurity: options.disableWebSecurity,
             viewportWidth: options.viewportWidth,
-            viewportHeight: options.viewportHeight
+            viewportHeight: options.viewportHeight,
+            onProgress: emitProgress
         });
 
         if (!pageSource) {
@@ -40,6 +48,7 @@ async function run(options) {
         }
 
         // Process HTML to markdown
+        emitProgress('converting');
         const processed = await getProcessedMarkdown(pageSource, options.url, {
             keepImages: options.images !== false,
             keepWebpageLinks: options.links !== false,
@@ -51,11 +60,14 @@ async function run(options) {
 
         // Output result
         if (options.output) {
+            emitProgress('writing');
             await fs.writeFile(options.output, processed, 'utf-8');
             console.log(`Output written to: ${options.output}`);
         } else {
             console.log(processed);
         }
+
+        emitProgress('done');
 
     } catch (error) {
         console.error(`Error: ${error.message}`);
@@ -90,6 +102,7 @@ function main() {
         .option('--viewport-width <width>', 'Set viewport width in pixels (320-1920)', (value) => parseInt(value, 10), 375)
         .option('--viewport-height <height>', 'Set viewport height in pixels (568-1080)', (value) => parseInt(value, 10), 667)
         .option('--disable-web-security', 'Disable web security (CORS) - use with caution for difficult sites', false)
+        .option('--progress', 'Emit PROGRESS:<stage> lines on stderr (for GUI front-ends)', false)
         .addHelpText('after', `
 Examples:
   Basic usage:

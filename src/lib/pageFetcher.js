@@ -19,6 +19,8 @@ const puppeteer = require('puppeteer');
  * @param {boolean} [options.disableWebSecurity=false] - Disable web security (CORS) - use with caution
  * @param {number} [options.viewportWidth=375] - Viewport width in pixels (320-1920)
  * @param {number} [options.viewportHeight=667] - Viewport height in pixels (568-1080)
+ * @param {function(string):void} [options.onProgress] - Called with a stage name
+ *   ('launching', 'fetching', 'waiting', 'extracting') as the fetch proceeds
  * @returns {Promise<string>} HTML source code of the page
  * @throws {Error} If there's an error while fetching the page
  */
@@ -30,7 +32,8 @@ async function getPageSource(url, options = {}) {
         disableWebSecurity = false,
         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         viewportWidth = 375,
-        viewportHeight = 667
+        viewportHeight = 667,
+        onProgress = () => {}
     } = options;
 
     // Validate viewport dimensions
@@ -57,6 +60,7 @@ async function getPageSource(url, options = {}) {
             args.push('--disable-web-security');
         }
         
+        onProgress('launching');
         browser = await puppeteer.launch({
             headless: isHeadless,
             args
@@ -71,6 +75,7 @@ async function getPageSource(url, options = {}) {
         await page.setUserAgent(userAgent);
         
         // Navigate to the URL and wait for DOM content to load
+        onProgress('fetching');
         await page.goto(url, { 
             waitUntil: 'domcontentloaded',
             timeout: 30000 // 30 second timeout
@@ -78,6 +83,7 @@ async function getPageSource(url, options = {}) {
         
         // Wait for the specified time (equivalent to Python's implicit wait)
         if (wait > 0) {
+            onProgress('waiting');
             await new Promise(resolve => setTimeout(resolve, wait * 1000));
         }
         
@@ -93,6 +99,7 @@ async function getPageSource(url, options = {}) {
         }
         
         // Get the full HTML source
+        onProgress('extracting');
         return await page.content();
 
     } catch (error) {
